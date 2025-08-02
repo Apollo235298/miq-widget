@@ -1,151 +1,38 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MIQ Study Assistant</title>
-  <style>
-    :root { --bg: #f8f9fb; --card: #ffffff; --line: #e5e7eb; --text: #111827; --muted: #6b7280; }
-    html, body { margin:0; padding:0; height:100%; background: var(--bg); font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"; }
-    .wrap { display:flex; flex-direction:column; height:100%; }
-    header { padding:12px 16px; border-bottom:1px solid var(--line); background: var(--card); position:sticky; top:0; z-index:10;}
-    header h1 { font-size:16px; margin:0; }
-    header .sub { color: var(--muted); font-size:12px; }
-    .controls { display:flex; gap:8px; align-items:center; margin-top:6px; flex-wrap:wrap; }
-    .controls select, .controls button { border:1px solid var(--line); background:#fff; border-radius:8px; padding:8px 10px; font-size:14px; }
-    .controls .pill { padding:6px 10px; border-radius:999px; border:1px solid var(--line); background:#fff; cursor:pointer; }
-    .controls .pill.active { background:#111827; color:#fff; }
-    .main { flex:1; overflow:auto; padding:16px; }
-    .card { background: var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 12px; margin:0 auto; max-width:820px; }
-    .msgs { display:flex; flex-direction:column; gap:12px; margin-bottom:12px; }
-    .msg { display:flex; gap:10px; }
-    .msg .role { font-weight:600; color:var(--muted); width:70px; flex:0 0 70px; }
-    .msg .bubble { background:#f4f5f7; border-radius:10px; padding:10px 12px; flex:1; white-space:pre-wrap; }
-    .msg.me .bubble{ background:#e9f0ff; }
-    .cite { margin-top:6px; font-size:12px; color:var(--muted); }
-    .input { display:flex; gap:8px; align-items:center; }
-    .input textarea { flex:1; min-height:52px; resize:vertical; padding:10px 12px; border:1px solid var(--line); border-radius:10px; font:inherit; }
-    .input button { padding:10px 14px; border-radius:10px; border:1px solid var(--line); background:#111827; color:#fff; font-weight:600; }
-    .footer { color:var(--muted); font-size:12px; margin-top:10px; }
-    .badge { display:inline-block; padding:2px 8px; background:#efefef; border-radius:999px; font-size:11px; margin-left:6px; }
-  </style>
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <h1>MIQ Study Assistant <span id="modeBadge" class="badge">default</span></h1>
-    <div class="sub">Answers are grounded in course readings and return chapter/page citations.</div>
-    <div class="controls">
-      <div>Mode:</div>
-      <button class="pill active" data-mode="default">Explain</button>
-      <button class="pill" data-mode="socratic">Socratic</button>
-      <button class="pill" data-mode="studyplan">Study Plan</button>
-      <div style="flex:1"></div>
-      <label>
-        Course
-        <select id="courseSel">
-          <option value="ENGAGING-CULTURE">Engaging Culture & Context</option>
-        </select>
-      </label>
-    </div>
-  </header>
+<!doctype html>
+<meta charset="utf-8">
+<title>MIQ Study Assistant (SafeCheck)</title>
+<style>
+  body{font-family:system-ui;margin:24px}
+  .pill{display:inline-block;padding:6px 10px;border:1px solid #ccc;border-radius:999px;margin-right:8px;cursor:pointer}
+  .pill.active{background:#111;color:#fff}
+  #badge{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:#eee;margin-left:8px}
+  textarea{width:100%;max-width:900px;height:120px;padding:10px;border:1px solid #ccc;border-radius:10px;margin:16px 0}
+  button{padding:10px 14px;border-radius:10px;border:1px solid #ccc;background:#111;color:#fff;font-weight:600}
+</style>
 
-  <main class="main">
-    <div class="card">
-      <div id="msgs" class="msgs"></div>
-      <div class="input">
-        <textarea id="q" placeholder="Ask about a concept, definition, or section… (e.g., ‘Define missional imagination and give sources’)"></textarea>
-        <button id="send">Send</button>
-      </div>
-      <div class="footer">Tip: Toggle “Socratic” for guided questions, or “Study Plan” for a short reading/practice plan.</div>
-    </div>
-  </main>
+<h1>MIQ Study Assistant <span id="badge">default</span></h1>
+<div>
+  <span class="pill active" data-mode="default">Explain</span>
+  <span class="pill" data-mode="socratic">Socratic</span>
+  <span class="pill" data-mode="studyplan">Study Plan</span>
 </div>
 
+<textarea id="q" placeholder="Ask about a concept, definition, or section…"></textarea>
+<button id="send">Send</button>
+
 <script>
-(function(){
-  const qs = new URLSearchParams(location.search);
-  const endpoint = qs.get('endpoint') || 'https://YOUR_BACKEND_DOMAIN/api/ask'; // replace in production
-  const course = qs.get('course') || 'ENGAGING-CULTURE';
-  const defaultMode = qs.get('mode') || 'default';
-  const jwt = qs.get('jwt') || null; // Optional: short-lived signed token from your backend
-
-  const msgsEl = document.getElementById('msgs');
-  const qEl = document.getElementById('q');
-  const sendBtn = document.getElementById('send');
-  const courseSel = document.getElementById('courseSel');
-  const modeBadge = document.getElementById('modeBadge');
-  courseSel.value = course;
-  setMode(defaultMode);
-
-  function add(role, text, citations){
-    const wrap = document.createElement('div');
-    wrap.className = 'msg ' + (role === 'You' ? 'me' : 'bot');
-    wrap.innerHTML = '<div class="role">'+role+'</div><div class="bubble">'+escapeHtml(text)+(citations? renderCitations(citations):'')+'</div>';
-    msgsEl.appendChild(wrap);
-    msgsEl.parentElement.parentElement.scrollTop = msgsEl.parentElement.parentElement.scrollHeight;
-  }
-  function renderCitations(cites){
-    if(!Array.isArray(cites) || !cites.length) return '';
-    const items = cites.map(c => {
-      const loc = [c.chapter ? ('Ch. '+c.chapter) : null, c.page ? ('p. '+c.page) : null].filter(Boolean).join(', ');
-      return '<li>'+escapeHtml(c.snippet || '')+(loc ? ' <em>('+loc+')</em>' : '')+'</li>';
-    }).join('');
-    return '<div class="cite"><strong>Sources:</strong><ul>'+items+'</ul></div>';
-  }
-  function escapeHtml(s){ return (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
-
-  // Mode controls
-  document.querySelectorAll('.pill').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.pill').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      setMode(btn.dataset.mode);
-    });
-  });
-  function setMode(m){
-    modeBadge.textContent = m;
-    modeBadge.className = 'badge';
-    if(m==='socratic') modeBadge.classList.add('soc');
-    if(m==='studyplan') modeBadge.classList.add('plan');
-  }
-
-  // Seed message
-  add('Assistant', 'Hi! Ask about your readings. I will answer from the course PDFs with citations. Toggle “Socratic” for guided questions or “Study Plan” for a short plan.');
-
-  async function ask(){
-    const question = qEl.value.trim();
-    if(!question) return;
-    add('You', question);
-    qEl.value='';
-
-    const payload = {
-      question,
-      course: courseSel.value,
-      mode: document.querySelector('.pill.active').dataset.mode
+  let mode = 'default';
+  document.querySelectorAll('.pill').forEach(p=>{
+    p.onclick = () => {
+      document.querySelectorAll('.pill').forEach(x=>x.classList.remove('active'));
+      p.classList.add('active');
+      mode = p.dataset.mode;
+      document.getElementById('badge').textContent = mode;
     };
-
-    try {
-      const resp = await fetch(endpoint, {
-        method:'POST',
-        headers: Object.assign({'Content-Type':'application/json'}, jwt ? {'Authorization':'Bearer '+jwt} : {}),
-        body: JSON.stringify(payload)
-      });
-      if(!resp.ok) throw new Error('HTTP '+resp.status);
-      const data = await resp.json();
-      add('Assistant', data.answer || '(No answer returned)', data.citations || []);
-    } catch (e){
-      add('Assistant', "⚠️ The study assistant is not connected yet.
-
-Ask your admin to deploy the backend at:\n" + endpoint + "\n\nFor now, here’s what a response will look like once connected:\n\n— Definition in your own words…\n— 2–3 key points\n— Citations to chapter/page.");
-    }
-  }
-
-  qEl.addEventListener('keydown', (e)=>{
-    if((e.ctrlKey || e.metaKey) && e.key === 'Enter'){ ask(); }
   });
-  sendBtn.addEventListener('click', ask);
-})();
+  document.getElementById('send').onclick = () => {
+    const val = document.getElementById('q').value.trim();
+    if(!val){ alert('Type a question first.'); return; }
+    alert('Send works!\nMode: '+mode+'\nQuestion: '+val+'\n(Backend not connected yet)');
+  };
 </script>
-</body>
-</html>
